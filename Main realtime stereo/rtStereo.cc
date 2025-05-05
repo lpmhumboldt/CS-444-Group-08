@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
 int fps = 10; // in frames per sec
 int frameDelay = 1000/(2*fps); // in millisec 
 double maxDistance = 5000.0; // mm
+int maxDisparity = 64;
 int rows  = 480;
 int cols  = 640;
 Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
@@ -82,7 +83,7 @@ if( map2y.empty()) cout << "Empty 2y lookup table"<<endl;
 
 
       // Compute depth image using GPU
-      stereoDepth(&rectifiedLeft, &rectifiedRight, &depthImage, maxDistance, rows, cols);
+      stereoDepth(&rectifiedLeft, &rectifiedRight, &depthImage, maxDisparity, rows, cols);
 
      // Smooth the depth image
      Mat medianFiltered;

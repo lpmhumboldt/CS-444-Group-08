@@ -4,7 +4,7 @@ NVCC = /usr/local/cuda/bin/nvcc
 
 # Compiler flags
 CCFLAGS =  -I/usr/include/opencv4 
-CUFLAGS = -I/usr/local/cuda-10.2/ -I/usr/include/opencv4 -w 
+CUFLAGS = -I/usr/local/cuda/bin -I/usr/include/opencv4 -w 
 
 
 #Load Libraries

@@ -1,104 +1,101 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
 #include <iostream>
+#include <fstream>
+#include <opencv2/opencv.hpp>
 #include "imageUtils.h"
-#include "matrixUtils.h"
-#include "utils.h"
+#include <climits> // For INT_MAX
+
 
 int main() {
+    std::cout << "[INFO] Starting stereo.cc (disparity + depth computation)\n";
 
-    int cols = 640;
-    int rows = 480;
-    int searchWidth = 5;
-    int searchHeight = 5;
-    int blurWidth = 5;
-    int blurheight = 5;
+    // === STEP 1: Load rectified stereo images ===
+    cv::Mat leftColor = cv::imread("left_rectified.ppm");
+    cv::Mat rightColor = cv::imread("right_rectified.ppm");
 
-    const char* leftBW = "leftBW.ppm";
-    const char* rightBW = "rightBW.ppm";
-    const char* depthImageName = "depth.ppm";
-    const char* disparityImageName = "disparity.ppm";    
+    if (leftColor.empty() || rightColor.empty()) {
+        std::cerr << "[ERROR] Failed to load left_rectified.ppm or right_rectified.ppm!\n";
+        return -1;
+    }
+    std::cout << "[INFO] Successfully loaded rectified images.\n";
 
-    unsigned char* depthImage = (unsigned char*) malloc(rows * cols * sizeof(unsigned char));
-    unsigned char* disparityImage = (unsigned char*) malloc(rows * cols * sizeof(unsigned char));
+    // === STEP 2: Convert to grayscale ===
+    cv::Mat grayLeft, grayRight;
+    try {
+        cv::cvtColor(leftColor, grayLeft, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(rightColor, grayRight, cv::COLOR_BGR2GRAY);
+        std::cout << "[INFO] Grayscale conversion successful.\n";
+    } catch (cv::Exception& e) {
+        std::cerr << "[FATAL] cvtColor failed: " << e.what() << std::endl;
+        return -1;
+    }
 
-    PPMImage* leftImg;
-    PPMImage* rightImg;
-    leftImg = readPPM(leftBW, 0);
-    rightImg = readPPM(rightBW, 0);
+    int rows = grayLeft.rows;
+    int cols = grayLeft.cols;
 
-    double leftAvg = 0.0;
-    double rightAvg = 0.0;
-    double depthAvg = 0.0;
-    double sumAvg = 0.0;
-    
-    int maxColor = 255;
-    int black = 0;
-    int white = 255;
+    // === STEP 3: Prepare output images ===
+    cv::Mat disparityMap(rows, cols, CV_8U, cv::Scalar(0));
+    cv::Mat depthMap(rows, cols, CV_32F, cv::Scalar(0.0f));
 
-    int acceptableRange = 1;
-    printf("start\n");
-    //Create disparity image
-    for (int row = 0; row < rows; row= row + searchWidth) {
-        for (int col = 0; col <= cols - searchHeight; col = col + searchHeight) {
-            int ID = col + row * cols;
-            for (int i = 0; i < searchWidth; i++) {
-                for (int y = 0; y < searchHeight; y++) {
-                    int rangeID = ID + i + (cols * y);
-                    leftAvg = leftAvg + leftImg->data[rangeID];
-                    rightAvg = rightAvg + rightImg->data[rangeID];
-                }
+    // === STEP 4: Disparity parameters ===
+    int windowSize = 5;
+    int halfWindow = windowSize / 2;
+    int maxDisparity = 64;
 
-                leftAvg = leftAvg / (searchHeight * searchWidth);
-                rightAvg = rightAvg / (searchHeight * searchWidth);
-                sumAvg = ((leftAvg + rightAvg) / 2);
+    // Camera parameters (from calibration)
+    float focalLength = 578.86f;        // pixels
+    float baseline = 0.0589621f;        // meters
 
-                for (int y = 0; y < searchHeight; y++) {
-                    int rangeID = ID + i + (cols * y);
-                    
-                    if (rightAvg > 10 && leftAvg > 10 && (fabs(rightAvg - leftAvg)) < 7) {  
-                        //disparityImage[rangeID] = black;
-                        disparityImage[rangeID] = black + sumAvg;
-                    } else {
-                        //disparityImage[rangeID] = white;
-                        disparityImage[rangeID] = white - sumAvg;
+    // === STEP 5: Compute disparity using SAD block matching ===
+    std::cout << "[INFO] Computing disparity and depth...\n";
+
+    for (int y = halfWindow; y < rows - halfWindow; ++y) {
+        for (int x = halfWindow; x < cols - halfWindow; ++x) {
+            int bestDisparity = 0;
+            int minSAD = INT_MAX;
+
+            for (int d = 0; d < maxDisparity; ++d) {
+                int xr = x - d;
+                if (xr - halfWindow < 0)
+                    break;
+
+                int SAD = 0;
+                for (int wy = -halfWindow; wy <= halfWindow; ++wy) {
+                    for (int wx = -halfWindow; wx <= halfWindow; ++wx) {
+                        int leftPixel = grayLeft.at<uchar>(y + wy, x + wx);
+                        int rightPixel = grayRight.at<uchar>(y + wy, xr + wx);
+                        SAD += std::abs(leftPixel - rightPixel);
                     }
                 }
-                rightAvg = 0.0;
-                leftAvg = 0.0;
-                sumAvg = 0.0;
+
+                if (SAD < minSAD) {
+                    minSAD = SAD;
+                    bestDisparity = d;
+                }
+            }
+
+            // === STEP 6: Save disparity (scaled) and compute depth ===
+            disparityMap.at<uchar>(y, x) = static_cast<uchar>((bestDisparity * 255) / maxDisparity);
+
+            if (bestDisparity > 0) {
+                float depth = (focalLength * baseline) / static_cast<float>(bestDisparity);
+                depthMap.at<float>(y, x) = depth;
+            } else {
+                depthMap.at<float>(y, x) = 0.0f;
             }
         }
     }
 
-    //create depth map
-    for (int row = 0; row < rows; row= row + searchWidth) {
-        for (int col = 0; col <= cols - searchHeight; col = col + searchHeight) {
+    // === STEP 7: Prepare final output images (convert to 3-channel BGR) ===
+    cv::Mat disparityColor, depthVis, depthColor;
+    cv::normalize(depthMap, depthVis, 0, 255, cv::NORM_MINMAX, CV_8U);
 
-            int ID = col + row * cols;
-            for (int i = 0; i < searchWidth; i++) {
-                for (int y = 0; y < searchHeight; y++) {
-                    int rangeID = ID + i + (cols * y);
-                    depthAvg = depthAvg + disparityImage[rangeID];
-                }
-            }
+    cv::cvtColor(disparityMap, disparityColor, cv::COLOR_GRAY2BGR);
+    cv::cvtColor(depthVis, depthColor, cv::COLOR_GRAY2BGR);
 
-            depthAvg = depthAvg / (blurheight * blurWidth);
+    // === STEP 8: Save results as PPM ===
+    cv::imwrite("disparity_custom.ppm", disparityColor);
+    cv::imwrite("depth_map.ppm", depthColor);
+    std::cout << "[INFO] Saved disparity_custom.ppm and depth_map.ppm\n";
 
-            for (int i = 0; i < searchWidth; i++) {
-                for (int y = 0; y < searchHeight; y++) {
-                    int rangeID = ID + i + (cols * y);
-                    depthImage[rangeID] = depthAvg;
-                }
-            }
-            depthAvg = 0.0;
-        }
-    }
-
-
-    writePPM(depthImageName, cols, rows, maxColor, 0, depthImage);
-    writePPM(disparityImageName, cols, rows, maxColor, 0, disparityImage);
-    printf("end\n");
     return 0;
 }
