@@ -7,8 +7,12 @@
 
 __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned char* depth, int maxDisparity, int rows, int cols) {
 
-        int x = blockIdx.x*blockDim.x + threadIdx.x;
-        int y = blockIdx.y*blockDim.y + threadIdx.y;
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+
+    int obstacleZoneSize = cols / 3;
+
+       
     
     // === STEP 4: Disparity parameters ===
     int windowSize = 11;
@@ -20,9 +24,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
 
     // === STEP 5: Compute disparity using SAD block matching ===
     //std::cout << "[INFO] Computing disparity and depth...\n";
-
-  //  for (int y = halfWindow; y < rows - halfWindow; ++y) {
-  //      for (int x = halfWindow; x < cols - halfWindow; ++x) {
+  
             int bestDisparity = 0;
             int minSAD = INT_MAX;
 
@@ -37,6 +39,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
                         int leftPixel = left[(y + wy) * cols + (x + wx)];
                         int rightPixel = right[(y + wy) * cols + (x + wx) - d];
                         SAD += std::abs(leftPixel - rightPixel);
+			//SAD += std::abs(rightPixel - leftPixel);
                     }
                 }
 
@@ -51,8 +54,9 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
             } else {
                 depth[y * cols + x] = 0;
             }
-     //   }
-   // }
+
+	    
+     printf("at  %d, %d, bfd is: %.3f\n", x, y, (double)depth[y * cols + x]);   
 
 
 }

@@ -15,7 +15,7 @@ using namespace cv;
 using namespace std;
 
 void stereoDepth(Mat* left, Mat* right, Mat* depth, double maxDistance, int rows, int cols) {
-	int maxDisparity = 128;
+	int maxDisparity =  64;
     int BLOCK_SIZE = 16; // use square blocks
     dim3 block(BLOCK_SIZE, BLOCK_SIZE);
     dim3 grid((cols + BLOCK_SIZE - 1) / BLOCK_SIZE,
