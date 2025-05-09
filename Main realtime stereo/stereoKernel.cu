@@ -10,13 +10,13 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
 
-    int obstacleZoneSize = cols / 3;
+
 
        
     
     // === STEP 4: Disparity parameters ===
-    int windowSize = 11;
-    int halfWindow = windowSize / 2;
+    int windowSize = 13;
+    int halfWindow = (windowSize-1) / 2;
 
     // Camera parameters (from calibration)
     float focalLength = 578.86f;        // pixels
@@ -36,8 +36,8 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
                 int SAD = 0;
                 for (int wy = -halfWindow; wy <= halfWindow; ++wy) {
                     for (int wx = -halfWindow; wx <= halfWindow; ++wx) {
-                        int leftPixel = left[(y + wy) * cols + (x + wx)];
-                        int rightPixel = right[(y + wy) * cols + (x + wx) - d];
+                        int leftPixel =(int) left[(y + wy) * cols + (x + wx)];
+                        int rightPixel =(int) right[(y + wy) * cols + (x + wx) - d];
                         SAD += std::abs(leftPixel - rightPixel);
 			//SAD += std::abs(rightPixel - leftPixel);
                     }
@@ -50,9 +50,10 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
             }
 
             if (bestDisparity > 0) {
-                depth[y * cols + x]  = (focalLength * baseline) / static_cast<float>(bestDisparity);
+                depth[y * cols + x] = (unsigned char)(bestDisparity);
+		//depth[y * cols + x]  = (unsigned char)((focalLength * baseline) / (float)(bestDisparity));
             } else {
-                depth[y * cols + x] = 0;
+                depth[y * cols + x] =(unsigned char)(0);
             }
 
 	    

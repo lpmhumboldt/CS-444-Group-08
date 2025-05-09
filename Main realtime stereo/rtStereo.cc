@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
 int fps = 10; // in frames per sec
 int frameDelay = 1000/(2*fps); // in millisec 
 double maxDistance = 5000.0; // mm
-int maxDisparity = 64;
+int maxDisparity = 128;
 int rows  = 480;
 int cols  = 640;
 Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
@@ -36,6 +36,23 @@ if( map1x.empty()) cout << "Empty 1x lookup table"<<endl;
 if( map1y.empty()) cout << "Empty 1y lookup table"<<endl;
 if( map2x.empty()) cout << "Empty 2x lookup table"<<endl;
 if( map2y.empty()) cout << "Empty 2y lookup table"<<endl;
+
+
+// added from help 
+float offset = -10.0;
+float currentRow;
+for(int row = 0; row < rows; row++){
+ for(int col = 0; col <  cols; col++){
+  currentRow = map2y.at<float>(row,col);
+  if(currentRow+offset < 0 || 
+   currentRow+offset>rows){
+    map2y.at<float>(row,col) = currentRow;
+  }else{
+  map2y.at<float>(row,col) = currentRow + offset;
+   }
+  }
+ }
+
 
 // GStreamer pipeline for Jetson Nano with IMX219-83 cameras
  string left_cam_pipeline  = "nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), width=640, height=480, framerate="+to_string(fps)+
@@ -85,9 +102,9 @@ if( map2y.empty()) cout << "Empty 2y lookup table"<<endl;
       // Compute depth image using GPU
       stereoDepth(&rectifiedLeft, &rectifiedRight, &depthImage, maxDisparity, rows, cols);
 
-     // Smooth the depth image
-     Mat medianFiltered;
-     medianBlur(depthImage, medianFiltered, 3);
+      // Smooth the depth image
+      Mat medianFiltered;
+      medianBlur(depthImage, medianFiltered, 3);
 
       // display depth map
       imshow("Depth",medianFiltered);

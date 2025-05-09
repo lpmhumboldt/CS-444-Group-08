@@ -11,6 +11,7 @@
 #include <cuda_runtime.h>
 #include "stereoKernel.h"
 
+
 using namespace cv;
 using namespace std;
 
@@ -22,10 +23,13 @@ void stereoDepth(Mat* left, Mat* right, Mat* depth, double maxDistance, int rows
               (rows + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
     // Allocate device memory (GPU)
-    uchar *d_left, *d_right, *d_depth;
+    uchar *d_left, *d_right, *d_depth, *d_rect_left, *d_rect_right;
     cudaMalloc((void**) &d_left, cols * rows * sizeof(uchar));
     cudaMalloc((void**) &d_right,cols * rows * sizeof(uchar));
     cudaMalloc((void**) &d_depth,cols * rows * sizeof(uchar));
+    cudaMalloc((void**) &d_rect_left,cols * rows * sizeof(uchar));
+    cudaMalloc((void**) &d_rect_right,cols * rows * sizeof(uchar));
+
 
     // Copy images from host (CPU RAM) to device (GPU)
     cudaMemcpy(d_left, left->data, cols * rows * sizeof(uchar), cudaMemcpyHostToDevice);
