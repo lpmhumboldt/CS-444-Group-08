@@ -9,10 +9,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
 
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
-
-
-
-       
+    float disparityThreshold = 4;
     
     // === STEP 4: Disparity parameters ===
     int windowSize = 13;
@@ -25,7 +22,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
     // === STEP 5: Compute disparity using SAD block matching ===
     //std::cout << "[INFO] Computing disparity and depth...\n";
   
-            int bestDisparity = 0;
+            float bestDisparity = 0;
             int minSAD = INT_MAX;
 
             for (int d = 0; d < maxDisparity; ++d) {
@@ -39,7 +36,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
                         int leftPixel =(int) left[(y + wy) * cols + (x + wx)];
                         int rightPixel =(int) right[(y + wy) * cols + (x + wx) - d];
                         SAD += std::abs(leftPixel - rightPixel);
-			//SAD += std::abs(rightPixel - leftPixel);
+			
                     }
                 }
 
@@ -48,16 +45,21 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
                     bestDisparity = d;
                 }
             }
-
-            if (bestDisparity > 0) {
-                depth[y * cols + x] = (unsigned char)(bestDisparity);
-		//depth[y * cols + x]  = (unsigned char)((focalLength * baseline) / (float)(bestDisparity));
+	if (bestDisparity > 0) {
+           // if (bestDisparity > 0 && bestDisparity > disparityThreshold) {
+                //depth[y * cols + x] = (unsigned char)(bestDisparity);
+		depth[y * cols + x]  = (unsigned char)((focalLength * baseline) / (float)(bestDisparity));
             } else {
                 depth[y * cols + x] =(unsigned char)(0);
             }
 
 	    
-     printf("at  %d, %d, bfd is: %.3f\n", x, y, (double)depth[y * cols + x]);   
+     printf("at  %d, %d, bestDisparty is: %.3f, disparityThreshold is: %.3f\n", x, y, bestDisparity, disparityThreshold);   
 
+    /* if (bestDisparity > disparityThreshold) {
+     	printf("bestDisparity is greater than disparityThreshold\n");
+     } else {
+     	printf("bestDisparity is greater than disparityThreshold\n");
+     }*/
 
 }
