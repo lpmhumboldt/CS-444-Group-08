@@ -9,7 +9,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
 
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
-    float disparityThreshold = 4;
+    float disparityThreshold = 50;
     
     // === STEP 4: Disparity parameters ===
     int windowSize = 13;
@@ -45,18 +45,19 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned
                     bestDisparity = d;
                 }
             }
-	if (bestDisparity > 0) {
+	if (bestDisparity > disparityThreshold) {
            // if (bestDisparity > 0 && bestDisparity > disparityThreshold) {
-                //depth[y * cols + x] = (unsigned char)(bestDisparity);
-		depth[y * cols + x]  = (unsigned char)((focalLength * baseline) / (float)(bestDisparity));
+           // printf("depth to write is: %u\n", (unsigned char)((focalLength * baseline) * 255 / (float)(bestDisparity)));
+	   //depth[y * cols + x] = (unsigned char)(bestDisparity);
+		depth[y * cols + x]  = (unsigned char)((focalLength * baseline) * 255 / (float)(bestDisparity));
             } else {
                 depth[y * cols + x] =(unsigned char)(0);
             }
 
 	    
-     printf("at  %d, %d, bestDisparty is: %.3f, disparityThreshold is: %.3f\n", x, y, bestDisparity, disparityThreshold);   
+/*     printf("at  %d, %d, bestDisparty is: %.3f, disparityThreshold is: %.3f\n", x, y, bestDisparity, disparityThreshold);   
 
-    /* if (bestDisparity > disparityThreshold) {
+     if (bestDisparity > disparityThreshold) {
      	printf("bestDisparity is greater than disparityThreshold\n");
      } else {
      	printf("bestDisparity is greater than disparityThreshold\n");

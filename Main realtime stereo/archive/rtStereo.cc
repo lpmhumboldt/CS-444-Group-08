@@ -1,3 +1,4 @@
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/videoio.hpp>
 #include <iostream>
@@ -9,8 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "stereoDepth.h"
-#include <fstream>
-#include "serialUtils.h"
 
 using namespace cv;
 using namespace std;
@@ -18,39 +17,29 @@ using namespace std;
 int main(int argc, char** argv) {
 
 int fps = 10; // in frames per sec
-int frameDelay = 1000/(2*fps); // in millisec 
-double maxDistance = 1000.0; // mm
+// int frameDelay = 1000/(2*fps); // in millisec 
+double maxDistance = 5000.0; // mm
 int maxDisparity = 128;
 int rows  = 480;
 int cols  = 640;
+
+//float depthArray[rows * cols];
+
 Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
+//Mat obstacleImage = Mat::zeros(rows,cols,CV_8UC1);
+//Mat filteredObstacles = Mat::zeros(rows,cols,CV_8UC1);
+Mat leftFrame, rightFrame;
+Mat rectifiedLeft, rectifiedRight,both;
+Mat medianDisparity, gaussianDisparity;
 
-int rowOffset = 427;
-int zones = 3;
-int zoneWidth = 213;
-int zoneOffset = 640;
+medianBlur(disparityImage, medianDisparity, 5);
+GaussianBlur(medianDisparity, gaussianDisparity, size(5,5),0);
 
-int zoneAvgDenominator = zoneWidth * rows;
+double z;
+double disparity;
 
-int zone1Avg = 0;
-int zone2Avg = 0;
-int zone3Avg = 0;
 
-//int objectThreshold = 0;
 
-const int cmdLength = 7;
-char cmd[cmdLength];
-int portID;
-const char* strCmd;
-const char* moveCmd;
-portID = serialPortOpen();
-
-if(portID < 0){
-	printf("error opening serial port \n");
-	exit(0);
-}
-
-std::vector<float> depthArray;
 //Read rectification lookup tables
 Mat map1x,map1y,map2x,map2y;
 FileStorage fs("lookupTables.xml",FileStorage::READ);
@@ -72,14 +61,24 @@ float currentRow;
 for(int row = 0; row < rows; row++){
  for(int col = 0; col <  cols; col++){
   currentRow = map2y.at<float>(row,col);
-  if(currentRow+offset < 0 || 
-   currentRow+offset>rows){
+  if(currentRow+offset < 0 || currentRow+offset>rows){
     map2y.at<float>(row,col) = currentRow;
   }else{
   map2y.at<float>(row,col) = currentRow + offset;
    }
   }
  }
+
+
+/*for(int zone = 0; zone < 2; zone ++){
+ for(int row = 0; row < rows; row++){ 
+  for(int col = 0; col < cols; col++){
+   int zoneLocation = (row + zone * (cols/3));
+  }
+ }
+}*/
+
+
 
 
 // GStreamer pipeline for Jetson Nano with IMX219-83 cameras
@@ -99,8 +98,6 @@ for(int row = 0; row < rows; row++){
         return -1;
     }
 
-
-    Mat leftFrame, rightFrame;
 
     cout << " width \n" << capL.get(CAP_PROP_FRAME_WIDTH)<<endl;
     cout << " height  \n" << capL.get(CAP_PROP_FRAME_HEIGHT)<<endl;
@@ -122,7 +119,7 @@ for(int row = 0; row < rows; row++){
 
 
       // Apply rectification
-      Mat rectifiedLeft, rectifiedRight, both;
+      //Mat rectifiedLeft, rectifiedRight, both;
       remap(leftFrame, rectifiedLeft, map1x, map1y, INTER_LINEAR);
       remap(rightFrame, rectifiedRight, map2x, map2y, INTER_LINEAR);
 
@@ -138,101 +135,22 @@ for(int row = 0; row < rows; row++){
       imshow("Depth",medianFiltered);
       hconcat(rectifiedLeft, rectifiedRight,both);
       imshow("Left and Right",both);
+
+/*      if (depthImage.isContinuous()) {
+	 cout << "depthImage converting to 1D array" << endl;
+         depthArray.assign(depthImage.datastart, depthImage.dataend);
+     	 cout << "depthImage converted into 1D array" << endl; 
+      }*/
+
+
+
   
-      if (depthImage.isContinuous()) {
- //    	 cout << "depth array being assigned" << endl;
-	 depthArray.assign(depthImage.datastart, depthImage.dataend);
- //  	 cout << "depth array has been assigned" << endl;
-
-	 /*
-	  for zone in range(zones):
-		for row in range(rows):
-			for zoneLoc in range(zoneWidth):
-				value = zoneLoc + (zone * zoneWidth) + (zoneOffset * row)
-					file.write(f"{value}\n")
-	*/
-
-	 for (int zone = 0; zone < zones; zone++) {
-	 	for (int row = 0; row < rows; row++) {
-			for (int rangeLoc = 0; rangeLoc < zoneWidth; rangeLoc++) {
-			
-				int location = rangeLoc + (zone * zoneWidth) + (zoneOffset * row);
-
-				if (zone == 0) {
-					zone1Avg = zone1Avg + depthArray[location];
-				} else if (zone == 1) {
-					zone2Avg = zone2Avg + depthArray[location];
-				} else {
-					zone3Avg = zone3Avg + depthArray[location];
-				}	
-			}
-		}
-	 }
-
-	zone1Avg = zone1Avg / zoneAvgDenominator;
-	zone2Avg = zone2Avg / zoneAvgDenominator;
-	zone3Avg = zone3Avg / zoneAvgDenominator;
- 
-	cout << "zone1Avg is: " << zone1Avg << endl;
-	cout << "zone2Avg is: " << zone2Avg << endl;
-	cout << "zone3Avg is: " << zone3Avg << endl;
-
-      } else {
-	cout << "depth failed to assign" << endl;	
-      }
-
-
       // pause
-      //waitKey(frameDelay) ;
+      waitKey(frameDelay) ;
 
 
+    }
 
-	bool zoneL = (zone1Avg <= zone3Avg);
-	bool zoneC = (zone2Avg <= zone1Avg);
-	bool zoneR = zone3Avg <= zone2Avg;	
-
-
-//	string moveCmd, strCmd;
-	if (zoneL && zoneC && zoneR) {
-	    moveCmd = "BKW100\n";
-            strCmd = "STP030\n";
-
-	}
-	 if(zoneC){
-		moveCmd = "FWD090\n";
-		strCmd = "STR090\n";
-	} else {
-	// if both sides are free
-		if(zoneL && zoneR){
-			moveCmd = "FWD080\n";
-			if(zoneL < zoneR) strCmd = "STR030\n";
-			else(strCmd = "STR150\n");
-		}
-		// leftSide is free, right is blocked
-		else if(zoneL && !zoneR){
-			moveCmd = "FWD080\n";
-			strCmd = "STR030\n";
-		}
-
-		// rightSide is free, left is blocked
-		else if(zoneR && !zoneL){
-			moveCmd = "FWD080\n";
-			strCmd = "STR120\n";
-		}
-
-		// both sides are blocked
-		else if (zoneL && zoneC && zoneR){
-			moveCmd = "BKW100\n";
-			strCmd = "STP030\n";
-		}
-	
-	//strCmd = "STR030\n";
-	//moveCmd = "FWD080\n";
-	serialPortWrite(moveCmd, portID);
-	serialPortWrite(strCmd, portID);
-	waitKey(10);	
-}
-}
     // Release resources
     capL.release();
     capR.release();
